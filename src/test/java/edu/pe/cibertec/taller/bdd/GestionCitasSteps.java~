@@ -235,7 +235,7 @@ public class GestionCitasSteps {
 
         assertEquals(
                 0.0,
-                resultadoCancelacion.getMontoPenalidad(),
+                resultadoCancelacion.getPenalidad(),
                 0.001
         );
     }
