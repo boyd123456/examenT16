@@ -1,5 +1,6 @@
 package edu.pe.cibertec.taller.servicio;
 
+import edu.pe.cibertec.taller.excepcion.HorarioOcupadoException;
 import edu.pe.cibertec.taller.repositorio.RepositorioCitas;
 import edu.pe.cibertec.taller.repositorio.RepositorioMecanicos;
 import edu.pe.cibertec.taller.servicio.impl.ServicioCitasImpl;
@@ -29,6 +30,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.*;
+
 
 @ExtendWith(MockitoExtension.class)
 class ServicioCitasImplTest {
@@ -243,12 +248,181 @@ class ServicioCitasImplTest {
 	@Test
 	@DisplayName("Agendar sobre una cita ya programada se rechaza con HorarioOcupadoException")
 	void agendarConSuperposicion() {
-		// Arrange
-		// TODO
+        // Arrange
+        String ambarPlacaSuperpuesta = "BOY-649";
+        Long idMecanico = 1L;
 
-		// Act y Assert
-		// TODO
+        LocalDateTime fechaReloj =
+                LocalDateTime.of(2026, 9, 19, 8, 0);
+
+        LocalDateTime inicioCitaExistente =
+                LocalDateTime.of(2026, 9, 20, 10, 0);
+
+        LocalDateTime inicioNuevaCita =
+                LocalDateTime.of(2026, 9, 20, 11, 0);
+
+        Mecanico mecanico = new Mecanico();
+        mecanico.setId(idMecanico);
+        mecanico.setNombre("Carlos Boyd");
+        mecanico.setEspecialidad(TipoServicio.MANTENIMIENTO_LIGERO);
+
+        Cita citaExistente = new Cita();
+        citaExistente.setMecanico(mecanico);
+        citaExistente.setPlacaVehiculo("ABC-123");
+        citaExistente.setTipoServicio(TipoServicio.MANTENIMIENTO_LIGERO);
+        citaExistente.setFechaHoraInicio(inicioCitaExistente);
+        citaExistente.setDuracionHoras(2);
+        citaExistente.setEstado(EstadoCita.PROGRAMADA);
+
+        when(repositorioMecanicos.findById(idMecanico))
+                .thenReturn(Optional.of(mecanico));
+
+        when(proveedorFechaHora.ahora())
+                .thenReturn(fechaReloj);
+
+        when(repositorioCitas.findByMecanicoIdAndEstado(
+                idMecanico,
+                EstadoCita.PROGRAMADA
+        ))
+                .thenReturn(Collections.singletonList(citaExistente));
+
+        // Act y Assert
+        assertThrows(
+                HorarioOcupadoException.class,
+                () -> servicioCitas.agendarCita(
+                        idMecanico,
+                        ambarPlacaSuperpuesta,
+                        TipoServicio.MANTENIMIENTO_LIGERO,
+                        inicioNuevaCita
+                )
+        );
+
+        verify(repositorioCitas, never()).save(any(Cita.class));
 	}
+
+
+    @Test
+    @DisplayName("Agendar una cita a las 12:00 se permite porque la cita anterior ya termino")
+    void agendarSinSuperposicionALasDoce() {
+
+        // Arrange
+        String ambarPlacaDoce = "BOY-649";
+        Long idMecanico = 1L;
+
+        LocalDateTime fechaReloj =
+                LocalDateTime.of(2026, 9, 19, 8, 0);
+
+        LocalDateTime inicioCitaExistente =
+                LocalDateTime.of(2026, 9, 20, 10, 0);
+
+        LocalDateTime inicioNuevaCita =
+                LocalDateTime.of(2026, 9, 20, 12, 0);
+
+        Mecanico mecanico = new Mecanico();
+        mecanico.setId(idMecanico);
+        mecanico.setNombre("Carlos Boyd");
+        mecanico.setEspecialidad(TipoServicio.MANTENIMIENTO_LIGERO);
+
+        Cita citaExistente = new Cita();
+        citaExistente.setMecanico(mecanico);
+        citaExistente.setPlacaVehiculo("ABC-123");
+        citaExistente.setTipoServicio(TipoServicio.MANTENIMIENTO_LIGERO);
+        citaExistente.setFechaHoraInicio(inicioCitaExistente);
+        citaExistente.setDuracionHoras(2);
+        citaExistente.setEstado(EstadoCita.PROGRAMADA);
+
+        when(repositorioMecanicos.findById(idMecanico))
+                .thenReturn(Optional.of(mecanico));
+
+        when(proveedorFechaHora.ahora())
+                .thenReturn(fechaReloj);
+
+        when(repositorioCitas.findByMecanicoIdAndEstado(
+                idMecanico,
+                EstadoCita.PROGRAMADA
+        )).thenReturn(Collections.singletonList(citaExistente));
+
+        when(repositorioCitas.save(any(Cita.class)))
+                .thenAnswer(invocacion -> invocacion.getArgument(0));
+
+        // Act
+        Cita resultado = servicioCitas.agendarCita(
+                idMecanico,
+                ambarPlacaDoce,
+                TipoServicio.MANTENIMIENTO_LIGERO,
+                inicioNuevaCita
+        );
+
+        // Assert
+        assertNotNull(resultado);
+        assertEquals(inicioNuevaCita, resultado.getFechaHoraInicio());
+        assertEquals(EstadoCita.PROGRAMADA, resultado.getEstado());
+
+        verify(repositorioCitas).save(any(Cita.class));
+    }
+
+
+
+    @Test
+    @DisplayName("Agendar una cita al dia siguiente a las 11:00 se permite")
+    void agendarSinSuperposicionAlDiaSiguiente() {
+
+        // Arrange
+        String ambarPlacaDiaSiguiente = "BOY-649";
+        Long idMecanico = 1L;
+
+        LocalDateTime fechaReloj =
+                LocalDateTime.of(2026, 9, 19, 8, 0);
+
+        LocalDateTime inicioCitaExistente =
+                LocalDateTime.of(2026, 9, 20, 10, 0);
+
+        LocalDateTime inicioNuevaCita =
+                LocalDateTime.of(2026, 9, 21, 11, 0);
+
+        Mecanico mecanico = new Mecanico();
+        mecanico.setId(idMecanico);
+        mecanico.setNombre("Carlos Boyd");
+        mecanico.setEspecialidad(TipoServicio.MANTENIMIENTO_LIGERO);
+
+        Cita citaExistente = new Cita();
+        citaExistente.setMecanico(mecanico);
+        citaExistente.setPlacaVehiculo("ABC-123");
+        citaExistente.setTipoServicio(TipoServicio.MANTENIMIENTO_LIGERO);
+        citaExistente.setFechaHoraInicio(inicioCitaExistente);
+        citaExistente.setDuracionHoras(2);
+        citaExistente.setEstado(EstadoCita.PROGRAMADA);
+
+        when(repositorioMecanicos.findById(idMecanico))
+                .thenReturn(Optional.of(mecanico));
+
+        when(proveedorFechaHora.ahora())
+                .thenReturn(fechaReloj);
+
+        when(repositorioCitas.findByMecanicoIdAndEstado(
+                idMecanico,
+                EstadoCita.PROGRAMADA
+        )).thenReturn(Collections.singletonList(citaExistente));
+
+        when(repositorioCitas.save(any(Cita.class)))
+                .thenAnswer(invocacion -> invocacion.getArgument(0));
+
+        // Act
+        Cita resultado = servicioCitas.agendarCita(
+                idMecanico,
+                ambarPlacaDiaSiguiente,
+                TipoServicio.MANTENIMIENTO_LIGERO,
+                inicioNuevaCita
+        );
+
+        // Assert
+        assertNotNull(resultado);
+        assertEquals(inicioNuevaCita, resultado.getFechaHoraInicio());
+        assertEquals(EstadoCita.PROGRAMADA, resultado.getEstado());
+
+        verify(repositorioCitas).save(any(Cita.class));
+    }
+
 
 	@Test
 	@DisplayName("Una cita que empieza justo cuando termina otra se acepta")
