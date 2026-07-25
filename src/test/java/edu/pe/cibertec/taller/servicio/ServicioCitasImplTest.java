@@ -12,6 +12,24 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+
+import edu.pe.cibertec.taller.excepcion.FechaInvalidaException;
+import edu.pe.cibertec.taller.modelo.Cita;
+import edu.pe.cibertec.taller.modelo.EstadoCita;
+import edu.pe.cibertec.taller.modelo.Mecanico;
+import edu.pe.cibertec.taller.modelo.TipoServicio;
+
+import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 @ExtendWith(MockitoExtension.class)
 class ServicioCitasImplTest {
 
@@ -33,20 +51,73 @@ class ServicioCitasImplTest {
 	void inicializar() {
 		servicioCitas = new ServicioCitasImpl(repositorioMecanicos, repositorioCitas,
 				proveedorFechaHora, servicioNotificaciones);
-		// TODO: crear aqui los datos comunes que necesiten los tests
+
+
+
+
+
 	}
 
 	@Test
 	@DisplayName("Agendar una cita valida la guarda, notifica y la retorna en estado PROGRAMADA")
 	void agendarCitaExitosa() {
-		// Arrange
-		// TODO
 
-		// Act
-		// TODO
+        // Arrange
+        String ambarPlacaExitosa = "BOY-649";
+        Long idMecanico = 1L;
 
-		// Assert
-		// TODO: verificar estado, duracion, save y notificacion
+        LocalDateTime fechaReloj =
+                LocalDateTime.of(2026, 9, 20, 10, 0);
+
+        LocalDateTime fechaCita =
+                LocalDateTime.of(2026, 9, 21, 10, 0);
+
+        Mecanico mecanico = new Mecanico();
+        mecanico.setId(idMecanico);
+        mecanico.setNombre("Carlos Boyd");
+        mecanico.setEspecialidad(TipoServicio.CAMBIO_ACEITE);
+
+        when(repositorioMecanicos.findById(idMecanico))
+                .thenReturn(Optional.of(mecanico));
+
+        when(proveedorFechaHora.ahora())
+                .thenReturn(fechaReloj);
+
+        when(repositorioCitas.findByMecanicoIdAndEstado(
+                idMecanico,
+                EstadoCita.PROGRAMADA
+        ))
+                .thenReturn(Collections.emptyList());
+
+        when(repositorioCitas.save(any(Cita.class)))
+                .thenAnswer(invocacion -> invocacion.getArgument(0));
+
+        // Act
+        Cita citaResultado = servicioCitas.agendarCita(
+                idMecanico,
+                ambarPlacaExitosa,
+                TipoServicio.CAMBIO_ACEITE,
+                fechaCita
+        );
+
+        // Assert
+        assertEquals(
+                EstadoCita.PROGRAMADA,
+                citaResultado.getEstado()
+        );
+
+        assertEquals(
+                1,
+                citaResultado.getDuracionHoras()
+        );
+
+        verify(repositorioCitas)
+                .save(any(Cita.class));
+
+        verify(servicioNotificaciones)
+                .notificarCitaAgendada(any(Cita.class));
+
+
 	}
 
 	@Test
@@ -95,12 +166,79 @@ class ServicioCitasImplTest {
 	@Test
 	@DisplayName("Agendar en una fecha del pasado lanza FechaInvalidaException")
 	void agendarConFechaEnElPasado() {
-		// Arrange
-		// TODO: recuerden mockear proveedorFechaHora.ahora()
+        // Arrange
+        String ambarPlaca = "BOY-649";
+        Long idMecanico = 1L;
 
-		// Act y Assert
-		// TODO
+        LocalDateTime fechaReloj = LocalDateTime.of(2026, 9, 20, 9, 0);
+        LocalDateTime fechaCita = LocalDateTime.of(2026, 9, 19, 10, 0);
+
+        Mecanico mecanico = new Mecanico();
+        mecanico.setId(idMecanico);
+        mecanico.setNombre("Carlos Boyd");
+        mecanico.setEspecialidad(TipoServicio.CAMBIO_ACEITE);
+
+        when(repositorioMecanicos.findById(idMecanico))
+                .thenReturn(Optional.of(mecanico));
+
+        when(proveedorFechaHora.ahora())
+                .thenReturn(fechaReloj);
+
+        // Act
+        FechaInvalidaException excepcion = assertThrows(
+                FechaInvalidaException.class,
+                () -> servicioCitas.agendarCita(
+                        idMecanico,
+                        ambarPlaca,
+                        TipoServicio.CAMBIO_ACEITE,
+                        fechaCita
+                )
+        );
+
+        // Assert
+        assertEquals(
+                "La fecha de la cita debe ser posterior a la fecha actual",
+                excepcion.getMessage()
+        );
+
+        verify(repositorioCitas, never()).save(any(Cita.class));
 	}
+
+    @Test
+    @DisplayName("Agendar una cita igual a la hora actual lanza FechaInvalidaException")
+    void agendarConFechaIgualAlReloj() {
+
+        // Arrange
+        String ambarPlacaIgual = "BOY-649";
+        Long idMecanico = 1L;
+
+        LocalDateTime fechaReloj = LocalDateTime.of(2026, 9, 20, 10, 0);
+        LocalDateTime fechaCita = LocalDateTime.of(2026, 9, 20, 10, 0);
+
+        Mecanico mecanico = new Mecanico();
+        mecanico.setId(idMecanico);
+        mecanico.setNombre("Carlos Boyd");
+        mecanico.setEspecialidad(TipoServicio.CAMBIO_ACEITE);
+
+        when(repositorioMecanicos.findById(idMecanico))
+                .thenReturn(Optional.of(mecanico));
+
+        when(proveedorFechaHora.ahora())
+                .thenReturn(fechaReloj);
+
+        // Act y Assert
+        assertThrows(
+                FechaInvalidaException.class,
+                () -> servicioCitas.agendarCita(
+                        idMecanico,
+                        ambarPlacaIgual,
+                        TipoServicio.CAMBIO_ACEITE,
+                        fechaCita
+                )
+        );
+
+        verify(repositorioCitas, never()).save(any(Cita.class));
+    }
 
 	@Test
 	@DisplayName("Agendar sobre una cita ya programada se rechaza con HorarioOcupadoException")
