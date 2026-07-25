@@ -22,6 +22,7 @@ import edu.pe.cibertec.taller.modelo.TipoServicio;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -33,6 +34,12 @@ import static org.mockito.Mockito.when;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.*;
+
+
+
+import edu.pe.cibertec.taller.excepcion.CitaNoCancelableException;
+import edu.pe.cibertec.taller.excepcion.CitaNoEncontradaException;
+import edu.pe.cibertec.taller.excepcion.SinDisponibilidadException;
 
 
 @ExtendWith(MockitoExtension.class)
@@ -466,43 +473,162 @@ class ServicioCitasImplTest {
 	@Test
 	@DisplayName("Cancelar una cita inexistente lanza CitaNoEncontradaException")
 	void cancelarCitaInexistente() {
-		// Arrange
-		// TODO
 
-		// Act y Assert
-		// TODO
+        // Arrange
+        Long ambarIdCitaInexistente = 99L;
+
+        when(repositorioCitas.findById(ambarIdCitaInexistente))
+                .thenReturn(Optional.empty());
+
+        // Act y Assert
+        assertThrows(
+                CitaNoEncontradaException.class,
+                () -> servicioCitas.cancelarCita(ambarIdCitaInexistente)
+        );
+
+        verify(repositorioCitas, never()).save(any(Cita.class));
+
+
 	}
 
 	@Test
 	@DisplayName("Cancelar una cita que ya fue cancelada lanza CitaNoCancelableException")
 	void cancelarCitaYaCancelada() {
-		// Arrange
-		// TODO
 
-		// Act y Assert
-		// TODO
+        // Arrange
+        Long ambarIdCitaCancelada = 10L;
+
+        Cita citaCancelada = new Cita();
+        citaCancelada.setId(ambarIdCitaCancelada);
+        citaCancelada.setEstado(EstadoCita.CANCELADA);
+
+        when(repositorioCitas.findById(ambarIdCitaCancelada))
+                .thenReturn(Optional.of(citaCancelada));
+
+        // Act y Assert
+        assertThrows(
+                CitaNoCancelableException.class,
+                () -> servicioCitas.cancelarCita(ambarIdCitaCancelada)
+        );
+
+        verify(repositorioCitas, never()).save(any(Cita.class));
+
+
+
+
 	}
 
 	@Test
 	@DisplayName("Buscar mecanico disponible retorna el primero sin citas superpuestas")
 	void buscarMecanicoDisponibleRetornaPrimeroLibre() {
-		// Arrange
-		// TODO: dos mecanicos de la misma especialidad, el primero ocupado
+        // Arrange
+        LocalDateTime ambarHorarioSolicitado =
+                LocalDateTime.of(2026, 9, 20, 10, 0);
 
-		// Act
-		// TODO
+        Mecanico primerMecanico = new Mecanico();
+        primerMecanico.setId(1L);
+        primerMecanico.setNombre("Mecanico ocupado");
+        primerMecanico.setEspecialidad(TipoServicio.CAMBIO_ACEITE);
 
-		// Assert
-		// TODO
+        Mecanico segundoMecanico = new Mecanico();
+        segundoMecanico.setId(2L);
+        segundoMecanico.setNombre("Mecanico disponible");
+        segundoMecanico.setEspecialidad(TipoServicio.CAMBIO_ACEITE);
+
+        Cita citaOcupada = new Cita();
+        citaOcupada.setMecanico(primerMecanico);
+        citaOcupada.setFechaHoraInicio(
+                LocalDateTime.of(2026, 9, 20, 10, 0)
+        );
+        citaOcupada.setDuracionHoras(1);
+        citaOcupada.setEstado(EstadoCita.PROGRAMADA);
+
+        when(repositorioMecanicos.findByEspecialidad(
+                TipoServicio.CAMBIO_ACEITE
+        )).thenReturn(List.of(primerMecanico, segundoMecanico));
+
+        when(repositorioCitas.findByMecanicoIdAndEstado(
+                1L,
+                EstadoCita.PROGRAMADA
+        )).thenReturn(List.of(citaOcupada));
+
+        when(repositorioCitas.findByMecanicoIdAndEstado(
+                2L,
+                EstadoCita.PROGRAMADA
+        )).thenReturn(List.of());
+
+        // Act
+        Mecanico resultado = servicioCitas.buscarMecanicoDisponible(
+                TipoServicio.CAMBIO_ACEITE,
+                ambarHorarioSolicitado
+        );
+
+        // Assert
+        assertNotNull(resultado);
+        assertEquals(2L, resultado.getId());
+        assertSame(segundoMecanico, resultado);
 	}
 
 	@Test
 	@DisplayName("Buscar mecanico cuando ninguno esta libre lanza SinDisponibilidadException")
 	void buscarMecanicoSinDisponibilidad() {
-		// Arrange
-		// TODO
 
-		// Act y Assert
-		// TODO
+
+
+        // Arrange
+        LocalDateTime ambarHorarioOcupado =
+                LocalDateTime.of(2026, 9, 20, 10, 0);
+
+        Mecanico primerMecanico = new Mecanico();
+        primerMecanico.setId(1L);
+        primerMecanico.setNombre("Primer mecanico");
+        primerMecanico.setEspecialidad(TipoServicio.CAMBIO_ACEITE);
+
+        Mecanico segundoMecanico = new Mecanico();
+        segundoMecanico.setId(2L);
+        segundoMecanico.setNombre("Segundo mecanico");
+        segundoMecanico.setEspecialidad(TipoServicio.CAMBIO_ACEITE);
+
+        Cita citaPrimerMecanico = new Cita();
+        citaPrimerMecanico.setMecanico(primerMecanico);
+        citaPrimerMecanico.setFechaHoraInicio(
+                LocalDateTime.of(2026, 9, 20, 10, 0)
+        );
+        citaPrimerMecanico.setDuracionHoras(1);
+        citaPrimerMecanico.setEstado(EstadoCita.PROGRAMADA);
+
+        Cita citaSegundoMecanico = new Cita();
+        citaSegundoMecanico.setMecanico(segundoMecanico);
+        citaSegundoMecanico.setFechaHoraInicio(
+                LocalDateTime.of(2026, 9, 20, 10, 0)
+        );
+        citaSegundoMecanico.setDuracionHoras(1);
+        citaSegundoMecanico.setEstado(EstadoCita.PROGRAMADA);
+
+        when(repositorioMecanicos.findByEspecialidad(
+                TipoServicio.CAMBIO_ACEITE
+        )).thenReturn(List.of(primerMecanico, segundoMecanico));
+
+        when(repositorioCitas.findByMecanicoIdAndEstado(
+                1L,
+                EstadoCita.PROGRAMADA
+        )).thenReturn(List.of(citaPrimerMecanico));
+
+        when(repositorioCitas.findByMecanicoIdAndEstado(
+                2L,
+                EstadoCita.PROGRAMADA
+        )).thenReturn(List.of(citaSegundoMecanico));
+
+        // Act y Assert
+        assertThrows(
+                SinDisponibilidadException.class,
+                () -> servicioCitas.buscarMecanicoDisponible(
+                        TipoServicio.CAMBIO_ACEITE,
+                        ambarHorarioOcupado
+                )
+        );
+
+
+
 	}
 }
